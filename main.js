@@ -1,203 +1,148 @@
-const { app, BrowserWindow, globalShortcut, ipcMain, dialog, powerSaveBlocker, session } = require('electron');
+// Exambro Surabaya v3.3.0 - Copyright @2026 by masCrayon
+// Licensed by masCrayon - Proprietary
+const { app, BrowserWindow, dialog, ipcMain, globalShortcut } = require('electron');
 const path = require('path');
+const { autoUpdater } = require('electron-updater');
+
+const APP_VERSION = "3.3.0";
+const APP_COPYRIGHT = "Copyright @2026 by masCrayon";
+const APP_LICENSE = "Licensed by masCrayon";
+
+console.log(`Exambro Surabaya v${APP_VERSION} - ${APP_COPYRIGHT}`);
 
 let mainWindow;
-let passWindow = null;
-let blockerId;
+let isQuiting = false;
 
-const PROKTOR_PASSWORD = 'surabaya2026';
-const EXAM_URL = 'https://ujian.smp-kotasurabaya.org/';
+autoUpdater.autoDownload = false;
+autoUpdater.autoInstallOnAppQuit = true;
 
 function createWindow() {
-  blockerId = powerSaveBlocker.start('prevent-display-sleep');
-
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 800,
-    kiosk: true,
-    fullscreen: true,
-    alwaysOnTop: true,
-    frame: false,
-    autoHideMenuBar: true,
-    skipTaskbar: false,
-    backgroundColor: '#0f172a',
+    kiosk: false, // set true kalau mau fullscreen ujian
+    fullscreenable: true,
+    show: false,
+    title: `Exambro Surabaya v${APP_VERSION} - ${APP_COPYRIGHT}`,
+    icon: path.join(__dirname, 'icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
-      contextIsolation: true,
-      devTools: false
+      contextIsolation: true
     }
   });
 
-  mainWindow.setMenu(null);
-  mainWindow.setAlwaysOnTop(true, 'screen-saver');
-  mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnAllWorkspaces: true });
+  mainWindow.maximize();
+  mainWindow.show();
 
-  // ANTI CACHE SOAL
-  const ses = mainWindow.webContents.session;
-  ses.webRequest.onBeforeSendHeaders((details, callback) => {
-    const headers = details.requestHeaders || {};
-    headers['Cache-Control'] = 'no-cache, no-store, must-revalidate';
-    headers['Pragma'] = 'no-cache';
-    headers['Expires'] = '0';
-    callback({ requestHeaders: headers });
-  });
+  // Load halaman login password
+  mainWindow.loadFile('password.html');
 
-  mainWindow.webContents.on('did-finish-load', () => {
-    mainWindow.webContents.executeJavaScript(`
-      try {
-        document.querySelectorAll('input').forEach(i=>{
-          i.setAttribute('autocomplete','off');
-          i.setAttribute('data-lpignore','true');
-        });
-      } catch(e){}
-    `, true).catch(()=>{});
-  });
-
-  mainWindow.loadURL(EXAM_URL);
-  mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-
-  mainWindow.webContents.on('before-input-event', (event, input) => {
-    if (input.type !== 'keyDown') return;
-    const key = input.key.toLowerCase();
-    if (input.control && input.shift && key === 'q') { event.preventDefault(); askExit(); }
-    if (input.control && input.alt && key === 'p') { event.preventDefault(); askExit(); }
-    if (input.control && input.shift && input.alt && key === 'q') { event.preventDefault(); askExit(); }
-  });
-
-  mainWindow.on('blur', () => {
-    if (app.isQuiting) return;
-    if (passWindow && !passWindow.isDestroyed()) return;
+  // Cek update otomatis 15 detik setelah buka (hanya di app jadi, bukan npm start)
+  if (app.isPackaged) {
     setTimeout(() => {
-      if (mainWindow && !mainWindow.isDestroyed() && !app.isQuiting) {
-        mainWindow.focus();
-        mainWindow.moveTop();
-      }
-    }, 100);
-  });
+      autoUpdater.checkForUpdates().catch(()=>{});
+    }, 15000);
+  }
 
   mainWindow.on('close', (e) => {
-    if (!app.isQuiting) { e.preventDefault(); askExit(); }
-  });
-}
-
-function registerBlockers() {
-  const toBlock = [
-    'Alt+Tab','Alt+F4','F11','F5','Super','Meta','Alt+Space',
-    'CommandOrControl+Tab','Super+D','Super+E','Super+L','Super+R',
-    'Control+Shift+Esc','Control+Alt+Delete'
-  ];
-  toBlock.forEach(k => { try { globalShortcut.register(k, () => true); } catch {} });
-
-  setInterval(() => {
-    if (app.isQuiting) return;
-    if (passWindow) return;
-    if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isFocused()) {
-      mainWindow.focus();
-      mainWindow.moveTop();
-      mainWindow.setKiosk(true);
-      mainWindow.setAlwaysOnTop(true, 'screen-saver');
-    }
-  }, 600);
-}
-
-function unregisterAndUnlock() {
-  globalShortcut.unregisterAll();
-  if (blockerId) { try { powerSaveBlocker.stop(blockerId); } catch {} }
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.setKiosk(false);
-    mainWindow.setFullScreen(false);
-    mainWindow.setAlwaysOnTop(false);
-    mainWindow.setVisibleOnAllWorkspaces(false);
-    mainWindow.setMovable(true);
-  }
-}
-
-async function unlockAndQuit() {
-  app.isQuiting = true;
-  unregisterAndUnlock();
-  try {
-    const ses = mainWindow ? mainWindow.webContents.session : session.defaultSession;
-    await ses.clearStorageData({ storages: ['cookies','localstorage','sessionstorage','caches'] });
-    await ses.clearCache();
-    await ses.clearAuthCache();
-  } catch(e){}
-  if (passWindow && !passWindow.isDestroyed()) passWindow.close();
-  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.destroy();
-  setTimeout(() => app.quit(), 800);
-}
-
-function createPassWindow() {
-  if (passWindow && !passWindow.isDestroyed()) { passWindow.focus(); return; }
-  if (mainWindow) {
-    mainWindow.setAlwaysOnTop(false);
-    mainWindow.setKiosk(false);
-  }
-
-  passWindow = new BrowserWindow({
-    width: 420,
-    height: 210,
-    parent: mainWindow,
-    modal: true,
-    frame: true,
-    alwaysOnTop: true,
-    resizable: false,
-    show: false,
-    title: 'Password Proktor',
-    webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false
-    }
-  });
-
-  passWindow.setMenu(null);
-  passWindow.loadFile(path.join(__dirname, 'password.html'));
-  
-  passWindow.once('ready-to-show', () => {
-    passWindow.show();
-    passWindow.focus();
-  });
-
-  passWindow.on('closed', () => {
-    passWindow = null;
-    if (!app.isQuiting && mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.setKiosk(true);
-      mainWindow.setAlwaysOnTop(true, 'screen-saver');
-      mainWindow.focus();
-      mainWindow.moveTop();
+    if (!isQuiting) {
+      e.preventDefault();
+      dialog.showMessageBox(mainWindow, {
+        type: 'question',
+        title: 'Keluar Exambro',
+        message: 'Yakin ingin keluar dari Exambro Surabaya?',
+        detail: APP_COPYRIGHT,
+        buttons: ['Batal', 'Keluar'],
+        defaultId: 0
+      }).then(({response}) => {
+        if (response === 1) {
+          isQuiting = true;
+          app.quit();
+        }
+      });
     }
   });
 }
 
-function askExit() {
-  if (app.isQuiting) return;
-  if (passWindow) return;
+// --- AUTO UPDATER EVENTS ---
+autoUpdater.on('checking-for-update', () => {
+  console.log('Mengecek update...');
+});
+
+autoUpdater.on('update-available', (info) => {
+  console.log('Update tersedia:', info.version);
   dialog.showMessageBox(mainWindow, {
-    type: 'question',
-    title: 'Keluar Exambro - Proktor Only',
-    message: 'Yakin ingin keluar? Ujian akan di-submit otomatis.',
-    detail: 'Aksi ini butuh password proktor dan akan menghapus cache siswa sebelumnya.',
-    buttons: ['Batal', 'Lanjut'],
-    defaultId: 0, cancelId: 0
-  }).then(({ response }) => { if (response === 1) createPassWindow(); });
-}
+    type: 'info',
+    title: 'Update Tersedia',
+    message: `Versi baru Exambro Surabaya v${info.version} tersedia!`,
+    detail: `Versi kamu: v${APP_VERSION}\n${APP_COPYRIGHT}\n\nKlik Download untuk update otomatis. Aplikasi akan terupdate tanpa perlu install ulang.`,
+    buttons: ['Nanti', 'Download & Update'],
+    defaultId: 1
+  }).then(({response}) => {
+    if (response === 1) {
+      autoUpdater.downloadUpdate();
+      dialog.showMessageBox(mainWindow, {
+        type: 'info',
+        title: 'Mendownload Update',
+        message: 'Sedang mendownload update... Mohon tunggu sampai selesai.',
+        buttons: ['OK']
+      });
+    }
+  });
+});
 
-app.isQuiting = false;
-ipcMain.on('exit-with-password', (e, pass) => {
-  if (pass === PROKTOR_PASSWORD) {
-    try { app.setLoginItemSettings({ openAtLogin: false }); } catch {}
-    if (passWindow) passWindow.close();
-    unlockAndQuit();
-  } else {
-    dialog.showErrorBox('Akses Ditolak', 'Password proktor salah!');
+autoUpdater.on('update-not-available', () => {
+  console.log('Aplikasi sudah versi terbaru');
+});
+
+autoUpdater.on('download-progress', (progress) => {
+  console.log(`Download: ${Math.round(progress.percent)}%`);
+  if (mainWindow) {
+    mainWindow.setProgressBar(progress.percent / 100);
   }
+});
+
+autoUpdater.on('update-downloaded', (info) => {
+  if (mainWindow) mainWindow.setProgressBar(-1);
+  dialog.showMessageBox(mainWindow, {
+    type: 'info',
+    title: 'Update Siap Install',
+    message: `Update v${info.version} sudah di-download!`,
+    detail: 'Aplikasi akan restart dan install otomatis. Semua data aman.',
+    buttons: ['Restart & Install Sekarang', 'Nanti'],
+    defaultId: 0
+  }).then(({response}) => {
+    if (response === 0) {
+      isQuiting = true;
+      autoUpdater.quitAndInstall();
+    }
+  });
+});
+
+autoUpdater.on('error', (err) => {
+  console.log('AutoUpdate error:', err);
+});
+
+// IPC dari preload.js
+ipcMain.on('app-quit', () => { isQuiting = true; app.quit(); });
+ipcMain.on('check-for-update-manual', () => {
+  if (!app.isPackaged) {
+    dialog.showMessageBox(mainWindow, { message: 'Cek update hanya bisa di aplikasi yang sudah di-install (bukan npm start)', buttons: ['OK'] });
+    return;
+  }
+  autoUpdater.checkForUpdates();
+});
+ipcMain.handle('get-app-info', () => {
+  return { version: APP_VERSION, copyright: APP_COPYRIGHT, license: APP_LICENSE };
 });
 
 app.whenReady().then(() => {
-  try { app.setLoginItemSettings({ openAtLogin: true, path: app.getPath('exe') }); } catch {}
   createWindow();
-  registerBlockers();
+  // Blokir Alt+Tab, Alt+F4, dll pas ujian
+  globalShortcut.register('Alt+F4', () => {});
+  globalShortcut.register('Control+Alt+Delete', () => {});
 });
 
-app.on('will-quit', () => unregisterAndUnlock());
-app.on('window-all-closed', () => { app.isQuiting = true; app.quit(); });
+app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
+app.on('will-quit', () => { globalShortcut.unregisterAll(); });

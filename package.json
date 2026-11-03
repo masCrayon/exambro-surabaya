@@ -21,9 +21,21 @@
   "build": {
     "appId": "com.smpkotasurabaya.exambro",
     "productName": "Exambro Surabaya",
-    "files": ["main.js","preload.js","password.html","package.json"],
+    "files": [
+      "main.js",
+      "preload.js",
+      "password.html",
+      "package.json"
+    ],
     "win": {
-      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
       "copyright": "Copyright @2026 by masCrayon",
       "legalTrademarks": "masCrayon",
       "companyName": "masCrayon"
@@ -33,5 +45,8 @@
       "allowToChangeInstallationDirectory": true,
       "copyright": "Copyright @2026 by masCrayon"
     }
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.11"
   }
 }
