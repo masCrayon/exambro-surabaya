@@ -1,0 +1,37 @@
+{
+  "name": "exambro-surabaya",
+  "version": "3.2.2",
+  "main": "main.js",
+  "description": "Exambro Surabaya - Secure Exam Browser for SMP Kota Surabaya",
+  "author": {
+    "name": "masCrayon",
+    "email": "mascrayon@hotmail.com"
+  },
+  "copyright": "Copyright @2026 by masCrayon",
+  "license": "Proprietary - Licensed by masCrayon",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "build:win": "electron-builder --win --x64"
+  },
+  "devDependencies": {
+    "electron": "^30.5.1",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.smpkotasurabaya.exambro",
+    "productName": "Exambro Surabaya",
+    "files": ["main.js","preload.js","password.html","package.json"],
+    "win": {
+      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "copyright": "Copyright @2026 by masCrayon",
+      "legalTrademarks": "masCrayon",
+      "companyName": "masCrayon"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "copyright": "Copyright @2026 by masCrayon"
+    }
+  }
+}
